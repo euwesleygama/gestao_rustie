@@ -91,7 +91,7 @@ const PerfilUsuario: React.FC<PerfilUsuarioProps> = ({ currentUser, onUserUpdate
 
     try {
       // Verificar se o email já está sendo usado por outro usuário
-      const { data: emailExists, error: emailError } = await supabase
+      const { data: emailExists } = await supabase
         .from('usuarios')
         .select('id_auth')
         .eq('email', formData.email)

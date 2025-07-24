@@ -359,11 +359,14 @@ function Calculadora() {
           const lucroTotalVenda = lucroUnitario * venda.quantidade;
           totalLucro += lucroTotalVenda;
           totalFaturamento += precoVenda * venda.quantidade;
-          // Para manter o campo de custo, vamos calcular o custo real (sem considerar taxa de pagamento)
+          // Calcular custo real (custo prato + custos fixos/incalculáveis)
           const custoPrato = prato.custoTotal * venda.quantidade;
           const totalTaxasPercent = calcularPorcentagemCustosFixos() + calcularPorcentagemCustosIncalculaveis();
           const custoComTaxas = custoPrato + (custoPrato * totalTaxasPercent / 100);
-          totalCusto += custoComTaxas;
+          // Calcular taxa de pagamento e somar ao custo
+          const taxaFormaPagamento = getTaxaPorTipo(venda.formaPagamentoId);
+          const valorTaxaPagamento = precoVenda * (taxaFormaPagamento / 100) * venda.quantidade;
+          totalCusto += custoComTaxas + valorTaxaPagamento;
         }
       }
     });

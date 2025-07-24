@@ -143,11 +143,8 @@ const ControleDiario: React.FC = () => {
         .eq('id', id)
         .eq('usuario_id', user?.id);
       if (error) throw error;
-      const { data: vendasData } = await supabase
-        .from('vendas_diarias')
-        .select('*')
-        .eq('usuario_id', user?.id);
-      setVendas(vendasData || []);
+      // Remover do estado local sem buscar tudo de novo
+      setVendas(prev => prev.filter(venda => venda.id !== id));
     } catch (err) {
       setError('Erro ao deletar venda.');
     } finally {

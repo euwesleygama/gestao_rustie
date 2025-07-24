@@ -41,7 +41,17 @@ function Calculadora() {
   const { user } = useUser();
   const [pratos, setPratos] = useState<Prato[]>([]);
   const [vendas, setVendas] = useState<VendaItem[]>([]);
-  const [vendasSalvas, setVendasSalvas] = useState<VendaItem[]>([]);
+  const [vendasSalvas, setVendasSalvas] = useState<VendaItem[]>(() => {
+    const vendasSalvasStorage = localStorage.getItem('vendasSalvas');
+    if (vendasSalvasStorage) {
+      try {
+        return JSON.parse(vendasSalvasStorage);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [precosVenda, setPrecosVenda] = useState<{[key: string]: number}>({});
   const [custosFixos, setCustosFixos] = useState<any[]>([]);
   const [custosIncalculaveis, setCustosIncalculaveis] = useState<any[]>([]);
@@ -273,6 +283,11 @@ function Calculadora() {
     console.log('Custos fixos %:', custosFixosPercent);
     console.log('Custos incalculáveis %:', custosIncalculaveisPercent);
   }, [custosFixos, vendasSalvas, precosVenda, faturamentoMensal]);
+
+  // Persistir vendasSalvas no localStorage sempre que mudar
+  useEffect(() => {
+    localStorage.setItem('vendasSalvas', JSON.stringify(vendasSalvas));
+  }, [vendasSalvas]);
 
   // Recalcular resultado sempre que as vendas, pratos, preços ou taxas mudarem
   useEffect(() => {

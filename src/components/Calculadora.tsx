@@ -320,6 +320,7 @@ function Calculadora() {
   const calcularResultado = () => {
     let totalFaturamento = 0;
     let totalCusto = 0;
+    let totalLucro = 0;
 
     // Verificar se há pratos disponíveis
     if (pratos.length === 0) {
@@ -333,20 +334,20 @@ function Calculadora() {
 
     vendasSalvas.forEach(venda => {
       const prato = pratos.find(p => p.id === venda.pratoId);
-      
       if (prato && venda.quantidade > 0) {
-        // Usar o preço de venda real da aba "Preços"
         const precoVenda = precosVenda[prato.id] || 0;
-        
         if (precoVenda > 0) {
-          // Usar taxa real da aba "Outros"
-          
-          // Calcular custo total incluindo taxas fixas e incalculáveis
+          // Calcular lucro real considerando a taxa da forma de pagamento
+          const calc = calcularPrecificacao(prato.custoTotal, precoVenda);
+          const capitalize = (str: string) => str.charAt(0).toUpperCase() + str.slice(1);
+          const lucroUnitario = (calc as any)["lucro" + capitalize(venda.formaPagamentoId)];
+          const lucroTotalVenda = lucroUnitario * venda.quantidade;
+          totalLucro += lucroTotalVenda;
+          totalFaturamento += precoVenda * venda.quantidade;
+          // Para manter o campo de custo, vamos calcular o custo real (sem considerar taxa de pagamento)
           const custoPrato = prato.custoTotal * venda.quantidade;
           const totalTaxasPercent = calcularPorcentagemCustosFixos() + calcularPorcentagemCustosIncalculaveis();
           const custoComTaxas = custoPrato + (custoPrato * totalTaxasPercent / 100);
-          
-          totalFaturamento += precoVenda * venda.quantidade;
           totalCusto += custoComTaxas;
         }
       }
@@ -355,7 +356,7 @@ function Calculadora() {
     setResultado({
       faturamento: totalFaturamento,
       custo: totalCusto,
-      lucro: totalFaturamento - totalCusto
+      lucro: totalLucro
     });
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Eye, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Eye, AlertCircle, RotateCw } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useUser } from '../lib/UserContext';
 
@@ -579,7 +579,7 @@ const CustosPratos: React.FC = () => {
               style={{ height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               title="Recalcular todos os custos dos pratos com base nos preços atuais dos ingredientes"
             >
-              <RefreshCw size={16} />
+              <RotateCw size={16} />
               Sincronizar Custos
             </button>
             <button 
@@ -607,7 +607,7 @@ const CustosPratos: React.FC = () => {
 
         {desincronizacaoDetectada && (
           <div className="alert alert-info animate-scaleIn">
-            <RefreshCw size={18} />
+            <RotateCw size={18} />
             <div>
               <strong>Sincronização Automática!</strong> Os preços dos ingredientes foram atualizados e os custos dos pratos foram recalculados automaticamente.
             </div>

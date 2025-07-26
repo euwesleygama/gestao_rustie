@@ -64,90 +64,6 @@ const CustosInsumos: React.FC = () => {
     });
   };
 
-  // Função para recalcular automaticamente os custos de todos os pratos
-  const recalcularCustosPratos = async (ingredienteAtualizado: string) => {
-    if (!user?.id) return;
-
-    try {
-      // 1. Buscar todos os pratos que usam este ingrediente
-      const { data: pratosComIngrediente, error: pratosError } = await supabase
-        .from('prato_ingredientes')
-        .select(`
-          prato_id,
-          quantidade,
-          pratos!inner(id, nome, custo_total)
-        `)
-        .eq('ingrediente_nome', ingredienteAtualizado)
-        .eq('pratos.usuario_id', user.id);
-
-      if (pratosError) {
-        console.error('Erro ao buscar pratos com ingrediente:', pratosError);
-        return;
-      }
-
-      // 2. Buscar o novo custo por unidade do ingrediente
-      const { data: ingredienteData, error: ingredienteError } = await supabase
-        .from('ingredientes')
-        .select('custo_por_unidade')
-        .eq('usuario_id', user.id)
-        .eq('nome', ingredienteAtualizado)
-        .single();
-
-      if (ingredienteError || !ingredienteData) {
-        console.error('Erro ao buscar custo do ingrediente:', ingredienteError);
-        return;
-      }
-
-      const novoCustoPorUnidade = ingredienteData.custo_por_unidade;
-
-      // 3. Atualizar cada prato que usa este ingrediente
-      for (const pratoIngrediente of pratosComIngrediente || []) {
-        const pratoId = pratoIngrediente.prato_id;
-        const quantidade = pratoIngrediente.quantidade;
-        const novoCustoIngrediente = novoCustoPorUnidade * quantidade;
-
-        // Atualizar o custo do ingrediente no prato
-        const { error: updateIngredienteError } = await supabase
-          .from('prato_ingredientes')
-          .update({ custo: novoCustoIngrediente })
-          .eq('prato_id', pratoId)
-          .eq('ingrediente_nome', ingredienteAtualizado);
-
-        if (updateIngredienteError) {
-          console.error('Erro ao atualizar custo do ingrediente no prato:', updateIngredienteError);
-          continue;
-        }
-
-        // Recalcular o custo total do prato
-        const { data: todosIngredientesPrato, error: ingredientesError } = await supabase
-          .from('prato_ingredientes')
-          .select('custo')
-          .eq('prato_id', pratoId);
-
-        if (ingredientesError) {
-          console.error('Erro ao buscar ingredientes do prato:', ingredientesError);
-          continue;
-        }
-
-        const novoCustoTotal = (todosIngredientesPrato || []).reduce((total, ing) => total + ing.custo, 0);
-
-        // Atualizar o custo total do prato
-        const { error: updatePratoError } = await supabase
-          .from('pratos')
-          .update({ custo_total: novoCustoTotal })
-          .eq('id', pratoId);
-
-        if (updatePratoError) {
-          console.error('Erro ao atualizar custo total do prato:', updatePratoError);
-        }
-      }
-
-      console.log(`✅ Custos dos pratos atualizados automaticamente para o ingrediente: ${ingredienteAtualizado}`);
-    } catch (err) {
-      console.error('Erro ao recalcular custos dos pratos:', err);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -179,18 +95,8 @@ const CustosInsumos: React.FC = () => {
     }
     
     try {
-      let ingredienteAtualizado = '';
       
       if (editingId) {
-        // Buscar o nome do ingrediente antes de atualizar para usar na recalculação
-        const { data: ingredienteAntigo } = await supabase
-          .from('ingredientes')
-          .select('nome')
-          .eq('id', editingId)
-          .single();
-        
-        ingredienteAtualizado = ingredienteAntigo?.nome || '';
-        
         // Atualizar ingrediente
         const { error } = await supabase
           .from('ingredientes')
@@ -235,11 +141,6 @@ const CustosInsumos: React.FC = () => {
         setFormData({ ingrediente: '', valorTotal: 0, quantidade: 0 });
         setShowForm(false);
         setEditingId(null);
-        
-        // Recalcular automaticamente os custos dos pratos se foi uma atualização
-        if (editingId && ingredienteAtualizado) {
-          await recalcularCustosPratos(ingredienteAtualizado);
-        }
       }
     } catch (err) {
       setError('Erro ao salvar ingrediente.');

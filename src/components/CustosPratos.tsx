@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Eye, AlertCircle, RotateCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Eye, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useUser } from '../lib/UserContext';
 
@@ -46,148 +46,15 @@ const CustosPratos: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [desincronizacaoDetectada, setDesincronizacaoDetectada] = useState(false);
+  const [custosIngredientes, setCustosIngredientes] = useState<{[key: string]: number}>({});
 
-  
-  useEffect(() => {
-    const fetchIngredientesEPratos = async () => {
-      if (!user?.id) return;
-      
-      setLoading(true);
-      setError('');
-      try {
-        
-        // Buscar ingredientes diretamente
-        const { data: ingredientes, error: ingredientesError } = await supabase
-          .from('ingredientes')
-          .select('nome, custo_por_unidade')
-          .eq('usuario_id', user.id);
-          
-        if (ingredientesError) {
-          setError('Erro ao buscar ingredientes.');
-        } else {
-          const nomesIngredientes = (ingredientes || []).map((ing: any) => ing.nome);
-          setIngredientesDisponiveis(nomesIngredientes);
-        }
-        
-        // Buscar pratos com ingredientes
-        const { data: pratosData, error: pratosError } = await supabase
-          .from('pratos')
-          .select(`
-            id,
-            nome,
-            custo_total,
-            usuario_id,
-            data_criacao,
-            data_atualizacao,
-            prato_ingredientes:prato_ingredientes (
-              id,
-              ingrediente_nome,
-              quantidade,
-              custo,
-              prato_id
-            )
-          `)
-          .eq('usuario_id', user.id);
-          
-        if (pratosError) {
-          setError('Erro ao buscar pratos.');
-        } else {
-          const pratosCorrigidos = (pratosData || []).map((prato: any) => ({
-            ...prato,
-            ingredientes: prato.prato_ingredientes || []
-          }));
-          setPratos(pratosCorrigidos);
-          
-          // Verificar se há desincronização entre preços de ingredientes e custos dos pratos
-          await verificarSincronizacao(pratosCorrigidos, ingredientes || []);
-        }
-      } catch (err) {
-        setError('Erro ao buscar dados.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchIngredientesEPratos();
-  }, [user?.id]);
-
-  // Função para verificar se há desincronização entre preços de ingredientes e custos dos pratos
-  const verificarSincronizacao = async (pratos: Prato[], ingredientes: any[]) => {
-    if (!user?.id || pratos.length === 0) return;
-
-    try {
-      let precisaRecalcular = false;
-
-      for (const prato of pratos) {
-        for (const ingredientePrato of prato.ingredientes || []) {
-          // Buscar o preço atual do ingrediente
-          const ingredienteAtual = ingredientes.find(ing => ing.nome === ingredientePrato.ingrediente_nome);
-          
-          if (ingredienteAtual) {
-            const custoCalculado = ingredienteAtual.custo_por_unidade * ingredientePrato.quantidade;
-            const diferenca = Math.abs(custoCalculado - ingredientePrato.custo);
-            
-            // Se a diferença for maior que 0.01, há desincronização
-            if (diferenca > 0.01) {
-              console.log(`⚠️ Desincronização detectada no prato "${prato.nome}" - ingrediente "${ingredientePrato.ingrediente_nome}"`);
-              console.log(`   Custo atual: R$ ${ingredientePrato.custo.toFixed(4)}`);
-              console.log(`   Custo calculado: R$ ${custoCalculado.toFixed(4)}`);
-              precisaRecalcular = true;
-            }
-          }
-        }
-      }
-
-      if (precisaRecalcular) {
-        console.log('🔄 Detectada desincronização de preços. Recarregando dados...');
-        setDesincronizacaoDetectada(true);
-        
-        // Recarregar os dados para mostrar os preços atualizados
-        const { data: pratosAtualizados, error } = await supabase
-          .from('pratos')
-          .select(`
-            id,
-            nome,
-            custo_total,
-            usuario_id,
-            data_criacao,
-            data_atualizacao,
-            prato_ingredientes:prato_ingredientes (
-              id,
-              ingrediente_nome,
-              quantidade,
-              custo,
-              prato_id
-            )
-          `)
-          .eq('usuario_id', user.id);
-
-        if (!error && pratosAtualizados) {
-          const pratosCorrigidos = pratosAtualizados.map((prato: any) => ({
-            ...prato,
-            ingredientes: prato.prato_ingredientes || []
-          }));
-          setPratos(pratosCorrigidos);
-        }
-      } else {
-        setDesincronizacaoDetectada(false);
-      }
-    } catch (err) {
-      console.error('Erro ao verificar sincronização:', err);
-    }
-  };
-
-  // Função para formatar quantidade sem decimais desnecessários
-  const formatarQuantidade = (quantidade: number) => {
-    return quantidade % 1 === 0 ? quantidade.toString() : quantidade.toFixed(2);
-  };
-
+  // Função para calcular o custo atual de um ingrediente
   const calcularCustoIngrediente = async (ingrediente: string, quantidade: number): Promise<number> => {
     try {
       const { data, error } = await supabase
         .from('ingredientes')
         .select('custo_por_unidade')
-        .eq('usuario_id', user.id)
+        .eq('usuario_id', user?.id)
         .eq('nome', ingrediente)
         .single();
         
@@ -201,72 +68,47 @@ const CustosPratos: React.FC = () => {
     }
   };
 
-  // Função para recalcular automaticamente todos os custos dos pratos existentes
-  const recalcularTodosCustosPratos = async () => {
-    if (!user?.id) return;
+  // Função para calcular o custo total atual de um prato
+  const calcularCustoTotalPrato = async (ingredientes: PratoIngrediente[]): Promise<number> => {
+    let custoTotal = 0;
+    
+    for (const ingrediente of ingredientes) {
+      const custo = await calcularCustoIngrediente(ingrediente.ingrediente_nome, ingrediente.quantidade);
+      custoTotal += custo;
+    }
+    
+    return custoTotal;
+  };
 
+  // Função para buscar pratos com custos atualizados
+  const buscarPratosComCustosAtualizados = async () => {
+    if (!user?.id) return;
+    
     setLoading(true);
     setError('');
-
     try {
-      // Buscar todos os pratos do usuário
-      const { data: pratos, error: pratosError } = await supabase
-        .from('pratos')
-        .select('id, nome')
+      // Buscar ingredientes disponíveis
+      const { data: ingredientes, error: ingredientesError } = await supabase
+        .from('ingredientes')
+        .select('nome, custo_por_unidade')
         .eq('usuario_id', user.id);
-
-      if (pratosError) {
-        console.error('Erro ao buscar pratos para recálculo:', pratosError);
-        setError('Erro ao buscar pratos para recálculo.');
-        return;
+        
+      if (ingredientesError) {
+        setError('Erro ao buscar ingredientes.');
+      } else {
+        const nomesIngredientes = (ingredientes || []).map((ing: any) => ing.nome);
+        setIngredientesDisponiveis(nomesIngredientes);
+        
+        // Armazenar custos dos ingredientes para uso na exibição
+        const custosMap: {[key: string]: number} = {};
+        ingredientes.forEach((ing: any) => {
+          custosMap[ing.nome] = ing.custo_por_unidade;
+        });
+        setCustosIngredientes(custosMap);
       }
-
-      // Para cada prato, recalcular seus custos
-      for (const prato of pratos || []) {
-        // Buscar ingredientes do prato
-        const { data: ingredientesPrato, error: ingredientesError } = await supabase
-          .from('prato_ingredientes')
-          .select('ingrediente_nome, quantidade')
-          .eq('prato_id', prato.id);
-
-        if (ingredientesError) {
-          console.error(`Erro ao buscar ingredientes do prato ${prato.nome}:`, ingredientesError);
-          continue;
-        }
-
-        let custoTotalPrato = 0;
-
-        // Recalcular custo de cada ingrediente
-        for (const ingrediente of ingredientesPrato || []) {
-          const novoCusto = await calcularCustoIngrediente(ingrediente.ingrediente_nome, ingrediente.quantidade);
-          
-          // Atualizar o custo do ingrediente no prato
-          const { error: updateError } = await supabase
-            .from('prato_ingredientes')
-            .update({ custo: novoCusto })
-            .eq('prato_id', prato.id)
-            .eq('ingrediente_nome', ingrediente.ingrediente_nome);
-
-          if (updateError) {
-            console.error(`Erro ao atualizar custo do ingrediente ${ingrediente.ingrediente_nome} no prato ${prato.nome}:`, updateError);
-          } else {
-            custoTotalPrato += novoCusto;
-          }
-        }
-
-        // Atualizar o custo total do prato
-        const { error: updatePratoError } = await supabase
-          .from('pratos')
-          .update({ custo_total: custoTotalPrato })
-          .eq('id', prato.id);
-
-        if (updatePratoError) {
-          console.error(`Erro ao atualizar custo total do prato ${prato.nome}:`, updatePratoError);
-        }
-      }
-
-      // Recarregar os dados para mostrar as atualizações
-      const { data: pratosData, error: fetchError } = await supabase
+      
+      // Buscar pratos com ingredientes
+      const { data: pratosData, error: pratosError } = await supabase
         .from('pratos')
         .select(`
           id,
@@ -279,30 +121,44 @@ const CustosPratos: React.FC = () => {
             id,
             ingrediente_nome,
             quantidade,
-            custo,
             prato_id
           )
         `)
         .eq('usuario_id', user.id);
-
-      if (fetchError) {
-        setError('Erro ao recarregar dados após sincronização.');
+        
+      if (pratosError) {
+        setError('Erro ao buscar pratos.');
       } else {
-        const pratosCorrigidos = (pratosData || []).map((prato: any) => ({
-          ...prato,
-          ingredientes: prato.prato_ingredientes || []
-        }));
-        setPratos(pratosCorrigidos);
-        setDesincronizacaoDetectada(false);
+        // Calcular custos atualizados para cada prato
+        const pratosComCustosAtualizados = await Promise.all(
+          (pratosData || []).map(async (prato: any) => {
+            const ingredientes = prato.prato_ingredientes || [];
+            const custoTotalAtualizado = await calcularCustoTotalPrato(ingredientes);
+            
+            return {
+              ...prato,
+              custo_total: custoTotalAtualizado,
+              ingredientes: ingredientes
+            };
+          })
+        );
+        
+        setPratos(pratosComCustosAtualizados);
       }
-
-      console.log('✅ Todos os custos dos pratos foram recalculados automaticamente');
     } catch (err) {
-      console.error('Erro ao recalcular custos dos pratos:', err);
-      setError('Erro ao sincronizar custos dos pratos.');
+      setError('Erro ao buscar dados.');
     } finally {
       setLoading(false);
     }
+  };
+  
+  useEffect(() => {
+    buscarPratosComCustosAtualizados();
+  }, [user?.id]);
+
+  // Função para formatar quantidade sem decimais desnecessários
+  const formatarQuantidade = (quantidade: number) => {
+    return quantidade % 1 === 0 ? quantidade.toString() : quantidade.toFixed(2);
   };
 
   const calcularCustoTotal = (ingredientes: Ingrediente[]): number => {
@@ -387,8 +243,8 @@ const CustosPratos: React.FC = () => {
           const ingredientesToInsert = formData.ingredientes.map(ing => ({
             prato_id: newPrato.id,
             ingrediente_nome: ing.ingrediente,
-            quantidade: ing.quantidade,
-            custo: ing.custo
+            quantidade: ing.quantidade
+            // Removido o campo 'custo' para não salvar valor fixo
           }));
           
           
@@ -406,39 +262,12 @@ const CustosPratos: React.FC = () => {
       }
       
       
-      // Recarregar pratos com ingredientes
-      const { data: pratosData, error: fetchError } = await supabase
-        .from('pratos')
-        .select(`
-          id,
-          nome,
-          custo_total,
-          usuario_id,
-          data_criacao,
-          data_atualizacao,
-          prato_ingredientes:prato_ingredientes (
-            id,
-            ingrediente_nome,
-            quantidade,
-            custo,
-            prato_id
-          )
-        `)
-        .eq('usuario_id', user.id);
-        
-      if (fetchError) {
-        setError('Erro ao recarregar dados.');
-      } else {
-        // Garantir que o estado seja atualizado antes de fechar o formulário
-        const pratosCorrigidos = (pratosData || []).map((prato: any) => ({
-          ...prato,
-          ingredientes: prato.prato_ingredientes || []
-        }));
-        setPratos(pratosCorrigidos);
-        setFormData({ nomePrato: '', ingredientes: [] });
-        setShowForm(false);
-        setEditingId(null);
-      }
+      // Recarregar pratos com custos atualizados
+      await buscarPratosComCustosAtualizados();
+      
+      setFormData({ nomePrato: '', ingredientes: [] });
+      setShowForm(false);
+      setEditingId(null);
     } catch (err) {
       setError('Erro ao salvar prato.');
     } finally {
@@ -452,7 +281,7 @@ const CustosPratos: React.FC = () => {
     const ingredientesForm = (prato.ingredientes || []).map(ing => ({
       ingrediente: ing.ingrediente_nome,
       quantidade: ing.quantidade,
-      custo: ing.custo
+      custo: 0 // Será calculado dinamicamente
     }));
     
     setFormData({
@@ -495,30 +324,8 @@ const CustosPratos: React.FC = () => {
       if (error) {
         throw error;
       }
-      // Recarregar pratos com ingredientes
-      const { data: pratosData, error: fetchError } = await supabase
-        .from('pratos')
-        .select(`
-          id,
-          nome,
-          custo_total,
-          usuario_id,
-          data_criacao,
-          data_atualizacao,
-          prato_ingredientes:prato_ingredientes (
-            id,
-            ingrediente_nome,
-            quantidade,
-            custo,
-            prato_id
-          )
-        `)
-        .eq('usuario_id', user.id);
-      if (fetchError) {
-        setError('Erro ao recarregar dados.');
-      } else {
-        setPratos(pratosData || []);
-      }
+      // Recarregar pratos com custos atualizados
+      await buscarPratosComCustosAtualizados();
     } catch (err) {
       setError('Erro ao deletar prato.');
     } finally {
@@ -574,13 +381,13 @@ const CustosPratos: React.FC = () => {
           <div className="flex gap-2">
             <button 
               className="btn btn-secondary" 
-              onClick={recalcularTodosCustosPratos}
+              onClick={buscarPratosComCustosAtualizados}
               disabled={loading}
               style={{ height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              title="Recalcular todos os custos dos pratos com base nos preços atuais dos ingredientes"
+              title="Atualizar custos dos pratos"
             >
-              <RotateCw size={16} />
-              Sincronizar Custos
+              <Eye size={16} />
+              Atualizar Custos
             </button>
             <button 
               className="btn btn-primary" 
@@ -605,11 +412,12 @@ const CustosPratos: React.FC = () => {
           </div>
         )}
 
-        {desincronizacaoDetectada && (
+        {insumosDisponiveis.length > 0 && (
           <div className="alert alert-info animate-scaleIn">
-            <RotateCw size={18} />
+            <AlertCircle size={18} />
             <div>
-              <strong>Sincronização Automática!</strong> Os preços dos ingredientes foram atualizados e os custos dos pratos foram recalculados automaticamente.
+              <strong>Informação:</strong> Os custos dos pratos são calculados automaticamente com base nos preços atuais dos ingredientes. 
+              Use o botão "Atualizar Custos" para recalcular após alterar preços de ingredientes.
             </div>
           </div>
         )}
@@ -826,12 +634,15 @@ const CustosPratos: React.FC = () => {
                           <tbody>
                             {ingredientes.length > 0 ? (
                               ingredientes.map((ing, index) => {
+                                // Usar o custo atual do ingrediente armazenado no estado
+                                const custoPorUnidade = custosIngredientes[ing.ingrediente_nome] || 0;
+                                const custoAtual = custoPorUnidade * ing.quantidade;
                                 return (
                                   <tr key={index}>
                                     <td className="font-medium">{ing.ingrediente_nome}</td>
                                     <td>{formatarQuantidade(ing.quantidade)}</td>
-                                    <td>R$ {ing.custo.toFixed(2)}</td>
-                                    <td>{((ing.custo / prato.custo_total) * 100).toFixed(1)}%</td>
+                                    <td>R$ {custoAtual.toFixed(2)}</td>
+                                    <td>{((custoAtual / prato.custo_total) * 100).toFixed(1)}%</td>
                                   </tr>
                                 );
                               })
